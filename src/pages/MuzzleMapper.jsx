@@ -12,21 +12,26 @@ function MuzzleMapper() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [showGuide, setShowGuide] = useState(true);
+  const [cameraUnavailable, setCameraUnavailable] = useState(false);
+  const [useUpload, setUseUpload] = useState(false);
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const processedCanvasRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Start camera
   useEffect(() => {
-    startCamera();
+    if (!useUpload) {
+      startCamera();
+    }
     
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [useUpload]);
 
   async function startCamera() {
     try {
@@ -41,10 +46,12 @@ function MuzzleMapper() {
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         setStream(mediaStream);
+        setCameraUnavailable(false);
       }
     } catch (err) {
-      setError('Unable to access camera. Please allow camera permissions.');
       console.error('Camera error:', err);
+      setCameraUnavailable(true);
+      setError('Camera unavailable. You can upload an image instead.');
     }
   }
 
@@ -68,6 +75,70 @@ function MuzzleMapper() {
 
     // Process the image
     processImage(canvas);
+  }
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    
+    if (!file) return;
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a valid image file (JPEG, PNG, or WebP)');
+      return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image file is too large. Please upload an image under 10MB');
+      return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      const imageDataUrl = e.target.result;
+      setCapturedImage(imageDataUrl);
+      
+      // Load image into canvas for processing
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        
+        // Resize image to optimal size for processing
+        const maxSize = 800;
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > height) {
+          if (width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Process the image
+        processImage(canvas);
+      };
+      img.src = imageDataUrl;
+    };
+    
+    reader.onerror = () => {
+      setError('Error reading file. Please try again.');
+    };
+    
+    reader.readAsDataURL(file);
   }
 
   function processImage(canvas) {
@@ -117,6 +188,14 @@ function MuzzleMapper() {
     setFeatureVector(null);
     setValidation(null);
     setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    
+    // Restart camera if not in upload mode
+    if (!useUpload && !cameraUnavailable) {
+      startCamera();
+    }
   }
 
   function useForEnrollment() {
@@ -136,6 +215,12 @@ function MuzzleMapper() {
     return 'error';
   }
 
+  function triggerFileUpload() {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }
+
   return (
     <div className="mapper-page">
       <div className="container">
@@ -150,48 +235,102 @@ function MuzzleMapper() {
         </div>
 
         {error && (
-          <div className="error-message">
-            ⚠️ {error}
+          <div className={`error-message ${cameraUnavailable || !validation?.isValid ? 'warning' : ''}`}>
+            {cameraUnavailable ? '📷' : validation?.isValid ? '⚠️' : '🐄'} {error}
           </div>
         )}
 
         <div className="mapper-container">
           {!capturedImage ? (
-            <div className="camera-view">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline
-                className="camera-feed"
-              />
-              {showGuide && (
-                <div className="guide-overlay">
-                  <div className="guide-box">
-                    <div className="guide-corner top-left"></div>
-                    <div className="guide-corner top-right"></div>
-                    <div className="guide-corner bottom-left"></div>
-                    <div className="guide-corner bottom-right"></div>
-                    <div className="guide-text">
-                      <span>Align cow muzzle within box</span>
+            <>
+              {/* Camera View */}
+              {!useUpload && !cameraUnavailable && (
+                <div className="camera-view">
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline
+                    className="camera-feed"
+                  />
+                  {showGuide && (
+                    <div className="guide-overlay">
+                      <div className="guide-box">
+                        <div className="guide-corner top-left"></div>
+                        <div className="guide-corner top-right"></div>
+                        <div className="guide-corner bottom-left"></div>
+                        <div className="guide-corner bottom-right"></div>
+                        <div className="guide-text">
+                          <span>Align cow muzzle within box</span>
+                        </div>
+                      </div>
                     </div>
+                  )}
+                  <div className="camera-controls">
+                    <button 
+                      onClick={() => setShowGuide(!showGuide)}
+                      className="btn btn-secondary"
+                    >
+                      {showGuide ? 'Hide Guide' : 'Show Guide'}
+                    </button>
+                    <button 
+                      onClick={captureImage}
+                      className="btn btn-primary btn-capture"
+                    >
+                      📸 Capture
+                    </button>
                   </div>
                 </div>
               )}
-              <div className="camera-controls">
-                <button 
-                  onClick={() => setShowGuide(!showGuide)}
-                  className="btn btn-secondary"
-                >
-                  {showGuide ? 'Hide Guide' : 'Show Guide'}
-                </button>
-                <button 
-                  onClick={captureImage}
-                  className="btn btn-primary btn-capture"
-                >
-                  📸 Capture
-                </button>
-              </div>
-            </div>
+
+              {/* Upload View */}
+              {(useUpload || cameraUnavailable) && (
+                <div className="upload-view">
+                  <div className="upload-icon">📁</div>
+                  <h3>Upload Muzzle Image</h3>
+                  <p>
+                    {cameraUnavailable 
+                      ? 'Camera is unavailable. Please upload a clear photo of the cow\'s muzzle.'
+                      : 'Or upload a pre-captured image of the cow\'s muzzle.'}
+                  </p>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/jpg,image/webp"
+                    onChange={handleFileUpload}
+                    className="file-input"
+                    id="muzzle-upload"
+                  />
+                  
+                  <label htmlFor="muzzle-upload" className="btn btn-primary btn-upload">
+                    📁 Choose Image File
+                  </label>
+                  
+                  <div className="upload-requirements">
+                    <h4>📋 Image Requirements</h4>
+                    <ul>
+                      <li>✅ Clear, well-lit photo of cow muzzle</li>
+                      <li>✅ Muzzle should fill most of the frame</li>
+                      <li>✅ Visible ridge patterns</li>
+                      <li>✅ JPEG, PNG, or WebP format</li>
+                      <li>✅ Max file size: 10MB</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Toggle between camera and upload */}
+              {!cameraUnavailable && (
+                <div className="capture-mode-toggle">
+                  <button
+                    onClick={() => setUseUpload(!useUpload)}
+                    className="btn btn-secondary btn-toggle"
+                  >
+                    {useUpload ? '📷 Switch to Camera' : '📁 Switch to Upload'}
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="capture-result">
               <div className="image-comparison">
@@ -278,7 +417,7 @@ function MuzzleMapper() {
 
               <div className="capture-actions">
                 <button onClick={retakePhoto} className="btn btn-secondary">
-                  🔄 Retake
+                  🔄 Retake / Upload Another
                 </button>
                 <button 
                   onClick={useForEnrollment} 
@@ -293,13 +432,20 @@ function MuzzleMapper() {
         </div>
 
         <canvas ref={canvasRef} style={{ display: 'none' }} />
+        <input 
+          ref={fileInputRef}
+          type="file" 
+          accept="image/jpeg,image/png,image/jpg,image/webp" 
+          style={{ display: 'none' }}
+          onChange={handleFileUpload}
+        />
 
         <div className="tech-details">
           <h3>🔬 AI-Powered Muzzle Detection Pipeline</h3>
           <div className="pipeline-steps">
             <div className="pipeline-step">
               <span className="step-badge">1</span>
-              <span>Capture Image</span>
+              <span>Capture/Upload Image</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
