@@ -165,7 +165,7 @@ function CattleList() {
                     <span className="badge badge-primary">{cow.certificateId}</span>
                   </div>
                   <div className="cattle-actions">
-                    <Link 
+                    <Link
                       to={`/certificate/${cow.id}`}
                       className="btn btn-sm btn-secondary"
                     >
@@ -180,12 +180,23 @@ function CattleList() {
                   </div>
                 </div>
 
+                <div className="cattle-image-section">
+                  {cow.muzzleImage ? (
+                    <img src={cow.muzzleImage} alt={`${cow.cowName} muzzle`} className="cattle-muzzle-img" />
+                  ) : (
+                    <div className="cattle-muzzle-placeholder">
+                      <span className="placeholder-icon">🐄</span>
+                      <span>No muzzle image</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="cattle-info">
                   <div className="cattle-main">
                     <h3 className="cattle-name">{cow.cowName}</h3>
                     <p className="cattle-owner">Owner: {cow.ownerName}</p>
                   </div>
-                  
+
                   <div className="cattle-details">
                     <div className="detail-item">
                       <span className="detail-label">Breed</span>
