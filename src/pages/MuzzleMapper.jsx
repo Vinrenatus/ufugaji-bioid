@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { validateMuzzleImage, toGrayscale, applyGaussianBlur, applyCLAHE, extractFeatureVector } from '../utils/imageProcessing';
 import './MuzzleMapper.css';
 
 function MuzzleMapper() {
@@ -7,6 +8,7 @@ function MuzzleMapper() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
   const [featureVector, setFeatureVector] = useState(null);
+  const [validation, setValidation] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [showGuide, setShowGuide] = useState(true);
@@ -72,11 +74,14 @@ function MuzzleMapper() {
     setIsProcessing(true);
     setError(null);
 
-    // Use setTimeout to allow UI to update
     setTimeout(() => {
       try {
         const ctx = canvas.getContext('2d');
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Validate muzzle image
+        const validationResult = validateMuzzleImage(imageData);
+        setValidation(validationResult);
 
         // Image processing pipeline
         let processed = toGrayscale(imageData);
@@ -106,184 +111,29 @@ function MuzzleMapper() {
     }, 100);
   }
 
-  // Image processing functions (inline for component)
-  function toGrayscale(imageData) {
-    const { data, width, height } = imageData;
-    const grayData = new Uint8ClampedArray(data.length);
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      grayData[i] = gray;
-      grayData[i + 1] = gray;
-      grayData[i + 2] = gray;
-      grayData[i + 3] = data[i + 3];
-    }
-    
-    return { data: grayData, width, height };
-  }
-
-  function applyGaussianBlur(imageData, width, height, radius = 1) {
-    const { data } = imageData;
-    const result = new Uint8ClampedArray(data.length);
-    
-    const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        let sum = 0;
-        let weight = 0;
-        
-        for (let ky = -1; ky <= 1; ky++) {
-          for (let kx = -1; kx <= 1; kx++) {
-            const px = Math.min(width - 1, Math.max(0, x + kx));
-            const py = Math.min(height - 1, Math.max(0, y + ky));
-            const idx = (py * width + px) * 4;
-            const kIdx = (ky + 1) * 3 + (kx + 1);
-            
-            sum += data[idx] * kernel[kIdx];
-            weight += kernel[kIdx];
-          }
-        }
-        
-        const idx = (y * width + x) * 4;
-        result[idx] = sum / weight;
-        result[idx + 1] = sum / weight;
-        result[idx + 2] = sum / weight;
-        result[idx + 3] = data[idx + 3];
-      }
-    }
-    
-    return { data: result, width, height };
-  }
-
-  function applyCLAHE(imageData, width, height, clipLimit = 2.0, tileSize = 8) {
-    const { data } = imageData;
-    const result = new Uint8ClampedArray(data.length);
-    
-    const tileWidth = Math.floor(width / tileSize);
-    const tileHeight = Math.floor(height / tileSize);
-    
-    for (let ty = 0; ty < tileSize; ty++) {
-      for (let tx = 0; tx < tileSize; tx++) {
-        const startX = tx * tileWidth;
-        const startY = ty * tileHeight;
-        const endX = Math.min(startX + tileWidth, width);
-        const endY = Math.min(startY + tileHeight, height);
-        
-        const histogram = new Array(256).fill(0);
-        let pixelCount = 0;
-        
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            const idx = (y * width + x) * 4;
-            histogram[data[idx]]++;
-            pixelCount++;
-          }
-        }
-        
-        const clipLimitCount = Math.floor((clipLimit * pixelCount) / 256);
-        for (let i = 0; i < 256; i++) {
-          if (histogram[i] > clipLimitCount) {
-            histogram[i] = clipLimitCount;
-          }
-        }
-        
-        const cdf = new Array(256).fill(0);
-        cdf[0] = histogram[0];
-        for (let i = 1; i < 256; i++) {
-          cdf[i] = cdf[i - 1] + histogram[i];
-        }
-        
-        const cdfMin = cdf.find(val => val > 0) || 0;
-        const scale = (255 * 256) / (pixelCount - cdfMin);
-        
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            const idx = (y * width + x) * 4;
-            const grayValue = data[idx];
-            const newValue = Math.floor(((cdf[grayValue] - cdfMin) * scale) / 256);
-            result[idx] = Math.max(0, Math.min(255, newValue));
-            result[idx + 1] = result[idx];
-            result[idx + 2] = result[idx];
-            result[idx + 3] = data[idx + 3];
-          }
-        }
-      }
-    }
-    
-    return { data: result, width, height };
-  }
-
-  function extractFeatureVector(imageData, width, height) {
-    const { data } = imageData;
-    const gridSize = 4;
-    const cellWidth = Math.floor(width / gridSize);
-    const cellHeight = Math.floor(height / gridSize);
-    
-    const features = [];
-    
-    for (let gy = 0; gy < gridSize; gy++) {
-      for (let gx = 0; gx < gridSize; gx++) {
-        const startX = gx * cellWidth;
-        const startY = gy * cellHeight;
-        
-        let sum = 0;
-        let count = 0;
-        
-        for (let y = startY; y < Math.min(startY + cellHeight, height); y++) {
-          for (let x = startX; x < Math.min(startX + cellWidth, width); x++) {
-            const idx = (y * width + x) * 4;
-            sum += data[idx];
-            count++;
-          }
-        }
-        
-        features.push(sum / count / 255);
-      }
-    }
-    
-    for (let gy = 0; gy < gridSize; gy++) {
-      for (let gx = 0; gx < gridSize; gx++) {
-        const startX = gx * cellWidth;
-        const startY = gy * cellHeight;
-        
-        let edgeCount = 0;
-        
-        for (let y = startY + 1; y < Math.min(startY + cellHeight, height - 1); y++) {
-          for (let x = startX + 1; x < Math.min(startX + cellWidth, width - 1); x++) {
-            const idx = (y * width + x) * 4;
-            const idxRight = (y * width + (x + 1)) * 4;
-            const idxDown = ((y + 1) * width + x) * 4;
-            
-            if (Math.abs(data[idx] - data[idxRight]) > 30 || Math.abs(data[idx] - data[idxDown]) > 30) {
-              edgeCount++;
-            }
-          }
-        }
-        
-        features.push(edgeCount / (cellWidth * cellHeight));
-      }
-    }
-    
-    return features;
-  }
-
   function retakePhoto() {
     setCapturedImage(null);
     setProcessedImage(null);
     setFeatureVector(null);
+    setValidation(null);
     setError(null);
   }
 
   function useForEnrollment() {
     if (featureVector) {
-      // Store in sessionStorage for enrollment page to pick up
       sessionStorage.setItem('pendingMuzzleData', JSON.stringify({
         image: processedImage,
-        featureVector
+        featureVector,
+        validation
       }));
       window.location.href = '/enroll';
     }
+  }
+
+  function getValidationColor(confidence) {
+    if (confidence >= 0.60) return 'success';
+    if (confidence >= 0.45) return 'warning';
+    return 'error';
   }
 
   return (
@@ -296,7 +146,7 @@ function MuzzleMapper() {
         </div>
 
         <div className="mapper-info">
-          <p><strong>MVP 1:</strong> Position the cow's muzzle within the guide box. The system will automatically enhance the image using grayscale conversion and CLAHE contrast enhancement.</p>
+          <p><strong>MVP 1:</strong> Position the cow's muzzle within the guide box. The system validates it's a muzzle print and applies CLAHE enhancement.</p>
         </div>
 
         {error && (
@@ -322,7 +172,7 @@ function MuzzleMapper() {
                     <div className="guide-corner bottom-left"></div>
                     <div className="guide-corner bottom-right"></div>
                     <div className="guide-text">
-                      <span>Align muzzle within box</span>
+                      <span>Align cow muzzle within box</span>
                     </div>
                   </div>
                 </div>
@@ -365,10 +215,53 @@ function MuzzleMapper() {
                 </div>
               </div>
 
+              {validation && (
+                <div className={`validation-result ${getValidationColor(validation.confidence)}`}>
+                  <h4>
+                    {validation.isValid ? '✅ Muzzle Print Validated' : '⚠️ Validation Warning'}
+                  </h4>
+                  <p className="validation-message">{validation.message}</p>
+                  <div className="confidence-meter">
+                    <div className="meter-label">Confidence Score</div>
+                    <div className="meter-bar">
+                      <div 
+                        className={`meter-fill ${getValidationColor(validation.confidence)}`}
+                        style={{ width: `${validation.confidence * 100}%` }}
+                      ></div>
+                    </div>
+                    <div className="meter-value">{(validation.confidence * 100).toFixed(1)}%</div>
+                  </div>
+                  <div className="validation-scores">
+                    <div className="score-item">
+                      <span className="score-name">Texture</span>
+                      <span className="score-value">{(validation.scores.texture * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="score-item">
+                      <span className="score-name">Symmetry</span>
+                      <span className="score-value">{(validation.scores.symmetry * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="score-item">
+                      <span className="score-name">Edge Density</span>
+                      <span className="score-value">{(validation.scores.edge * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="score-item">
+                      <span className="score-name">Contrast</span>
+                      <span className="score-value">{(validation.scores.contrast * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                  {!validation.isValid && (
+                    <div className="validation-warning">
+                      ⚠️ <strong>Note:</strong> For best results, ensure the image shows a clear cow muzzle with visible ridge patterns. 
+                      This validation helps ensure accurate matching.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {featureVector && (
                 <div className="feature-info">
                   <h4>✅ Feature Vector Extracted</h4>
-                  <p>16-dimensional feature vector successfully extracted from muzzle print</p>
+                  <p>28-dimensional biometric feature vector successfully extracted</p>
                   <div className="feature-visualization">
                     {featureVector.map((val, idx) => (
                       <div key={idx} className="feature-bar">
@@ -402,31 +295,58 @@ function MuzzleMapper() {
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         <div className="tech-details">
-          <h3>🔬 Image Processing Pipeline</h3>
+          <h3>🔬 AI-Powered Muzzle Detection Pipeline</h3>
           <div className="pipeline-steps">
             <div className="pipeline-step">
               <span className="step-badge">1</span>
-              <span>Capture RGB Image</span>
+              <span>Capture Image</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">2</span>
-              <span>Convert to Grayscale</span>
+              <span>Validate Muzzle (LBP + Symmetry)</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">3</span>
-              <span>Gaussian Blur (Noise Reduction)</span>
+              <span>Grayscale Conversion</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">4</span>
-              <span>CLAHE Enhancement</span>
+              <span>Gaussian Blur</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">5</span>
-              <span>Feature Vector Extraction</span>
+              <span>CLAHE Enhancement</span>
+            </div>
+            <div className="pipeline-arrow">→</div>
+            <div className="pipeline-step">
+              <span className="step-badge">6</span>
+              <span>Feature Extraction (28-D)</span>
+            </div>
+          </div>
+          
+          <div className="algorithm-details">
+            <h4>🧠 Validation Algorithm</h4>
+            <div className="algo-grid">
+              <div className="algo-item">
+                <strong>Local Binary Patterns (LBP)</strong>
+                <p>Analyzes texture patterns unique to muzzle ridges</p>
+              </div>
+              <div className="algo-item">
+                <strong>Symmetry Analysis</strong>
+                <p>Cow muzzles have bilateral symmetry patterns</p>
+              </div>
+              <div className="algo-item">
+                <strong>Edge Density</strong>
+                <p>Measures ridge density characteristic of muzzle prints</p>
+              </div>
+              <div className="algo-item">
+                <strong>Contrast Distribution</strong>
+                <p>Validates proper lighting and image quality</p>
+              </div>
             </div>
           </div>
         </div>
