@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getAllCattle, getStats, deleteCattle } from '../utils/database';
 import './CattleList.css';
@@ -10,16 +10,18 @@ function CattleList() {
   const [filterBreed, setFilterBreed] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
 
-  useEffect(() => {
-    loadCattle();
-  }, []);
-
-  function loadCattle() {
+  const loadCattle = useCallback(() => {
     const allCattle = getAllCattle();
     const allStats = getStats();
     setCattle(allCattle);
     setStats(allStats);
-  }
+  }, []);
+
+  // Initialize cattle data on mount
+   
+  useEffect(() => {
+    loadCattle();
+  }, [loadCattle]);
 
   function handleDelete(id) {
     if (window.confirm('Are you sure you want to delete this cattle record?')) {

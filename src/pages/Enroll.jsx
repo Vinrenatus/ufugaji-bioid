@@ -46,20 +46,20 @@ function Enroll() {
     notes: ''
   });
   
-  const [pendingMuzzleData, setPendingMuzzleData] = useState(null);
+  const [pendingMuzzleData, setPendingMuzzleData] = useState(() => {
+    // Initialize from sessionStorage on first render
+    const stored = sessionStorage.getItem('pendingMuzzleData');
+    return stored ? JSON.parse(stored) : null;
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
-  const [enrolledCattle, setEnrolledCattle] = useState([]);
+  const [enrolledCattle, setEnrolledCattle] = useState(() => getAllCattle());
   const [useSample, setUseSample] = useState(false);
 
+  // Initialize enrolled cattle on mount
+   
   useEffect(() => {
-    // Check for pending muzzle data from mapper
-    const stored = sessionStorage.getItem('pendingMuzzleData');
-    if (stored) {
-      setPendingMuzzleData(JSON.parse(stored));
-    }
-    
-    // Load enrolled cattle
+    // Load enrolled cattle on mount
     setEnrolledCattle(getAllCattle());
   }, []);
 

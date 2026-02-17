@@ -8,8 +8,8 @@
  * Returns confidence score 0-1
  */
 export function validateMuzzleImage(imageData) {
-  const { data, width, height } = imageData;
-  
+  const { width, height } = imageData;
+
   // Check 1: Texture analysis - muzzle prints have distinctive ridge patterns
   const textureScore = analyzeTexture(imageData, width, height);
   
@@ -289,7 +289,7 @@ export function applyCLAHE(imageData, clipLimit = 2.0, tileSize = 8) {
 /**
  * Apply Gaussian blur for noise reduction
  */
-export function applyGaussianBlur(imageData, radius = 1) {
+export function applyGaussianBlur(imageData) {
   const { data, width, height } = imageData;
   const result = new Uint8ClampedArray(data.length);
   

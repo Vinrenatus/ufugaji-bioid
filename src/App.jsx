@@ -20,6 +20,10 @@ function App() {
                 <span className="tagline">Livestock Muzzle Print Biometrics</span>
               </div>
             </Link>
+            <div className="school-info">
+              <span className="school-name">Edmund Rice Catholic Education Center</span>
+              <span className="school-badge">KSEF 2026</span>
+            </div>
             <nav className="main-nav">
               <Link to="/" className="nav-link">Home</Link>
               <Link to="/enroll" className="nav-link">Enroll</Link>
@@ -42,8 +46,9 @@ function App() {
 
         <footer className="app-footer">
           <div className="footer-content">
-            <p>KSEF 2026 | Computer Science - AI & Computer Systems</p>
+            <p>Edmund Rice Catholic Education Center | KSEF 2026</p>
             <p className="footer-tagline">Securing Kenya's Livestock, One Muzzle Print at a Time</p>
+            <p className="footer-category">Computer Science - Artificial Intelligence & Computer Systems</p>
           </div>
         </footer>
       </div>

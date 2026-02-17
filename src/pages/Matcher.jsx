@@ -11,40 +11,40 @@ function Matcher() {
   const [matchResults, setMatchResults] = useState(null);
   const [validation, setValidation] = useState(null);
   const [error, setError] = useState(null);
-  const [scanAnimation, setScanAnimation] = useState(false);
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    startCamera();
-    
+    const initCamera = async () => {
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          setStream(mediaStream);
+        }
+      } catch (err) {
+        console.error('Camera error:', err);
+        setError('Unable to access camera. Please upload an image instead.');
+      }
+    };
+
+    initCamera();
+
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function startCamera() {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-      }
-    } catch (err) {
-      setError('Unable to access camera. Please allow camera permissions.');
-      console.error('Camera error:', err);
-    }
-  }
 
   function captureAndMatch() {
     if (!videoRef.current || !canvasRef.current) return;
@@ -65,7 +65,6 @@ function Matcher() {
 
   function processAndMatch(canvas) {
     setIsProcessing(true);
-    setScanAnimation(true);
     setError(null);
     setMatchResults(null);
     setValidation(null);
@@ -94,7 +93,7 @@ function Matcher() {
 
         // Get all cattle and compare
         const cattle = getAllCattle();
-        
+
         if (cattle.length === 0) {
           setMatchResults({
             queryFeatures,
@@ -102,18 +101,17 @@ function Matcher() {
             validation: validationResult
           });
           setIsProcessing(false);
-          setScanAnimation(false);
           return;
         }
 
         const results = cattle.map(cattle => {
           const similarity = calculateSimilarity(queryFeatures, cattle.featureVector);
-          
+
           // Apply confidence boost if muzzle validation is high
-          const adjustedSimilarity = validationResult.confidence >= 0.60 
-            ? Math.min(100, similarity * 1.05) 
+          const adjustedSimilarity = validationResult.confidence >= 0.60
+            ? Math.min(100, similarity * 1.05)
             : similarity;
-          
+
           return {
             ...cattle,
             matchPercentage: adjustedSimilarity,
@@ -131,11 +129,9 @@ function Matcher() {
         });
 
         setIsProcessing(false);
-        setScanAnimation(false);
       } catch (err) {
         setError('Error processing image. Please try again.');
         setIsProcessing(false);
-        setScanAnimation(false);
         console.error('Matching error:', err);
       }
     }, 2000);

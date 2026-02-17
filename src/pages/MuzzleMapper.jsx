@@ -13,47 +13,48 @@ function MuzzleMapper() {
   const [error, setError] = useState(null);
   const [showGuide, setShowGuide] = useState(true);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
-  const [useUpload, setUseUpload] = useState(false);
+  const [captureMode, setCaptureMode] = useState('camera'); // 'camera' or 'upload'
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const processedCanvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Start camera
   useEffect(() => {
-    if (!useUpload) {
-      startCamera();
-    }
+    const initCamera = async () => {
+      if (captureMode === 'camera' && !capturedImage && !cameraUnavailable) {
+        try {
+          const mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          });
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+            setStream(mediaStream);
+            setCameraUnavailable(false);
+          }
+        } catch (err) {
+          console.error('Camera error:', err);
+          setCameraUnavailable(true);
+          setCaptureMode('upload');
+          setError('Camera access unavailable. Please upload an image of the cow muzzle instead.');
+        }
+      }
+    };
+    
+    initCamera();
     
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [useUpload]);
-
-  async function startCamera() {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-        setCameraUnavailable(false);
-      }
-    } catch (err) {
-      console.error('Camera error:', err);
-      setCameraUnavailable(true);
-      setError('Camera unavailable. You can upload an image instead.');
-    }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureMode, capturedImage, cameraUnavailable]);
 
   function captureImage() {
     if (!videoRef.current || !canvasRef.current) return;
@@ -62,18 +63,12 @@ function MuzzleMapper() {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    // Set canvas size to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
-    // Draw current video frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Get image data
-    const imageData = canvas.toDataURL('image/png');
-    setCapturedImage(imageData);
-
-    // Process the image
+    const imageDataUrl = canvas.toDataURL('image/png');
+    setCapturedImage(imageDataUrl);
     processImage(canvas);
   }
 
@@ -91,7 +86,7 @@ function MuzzleMapper() {
     
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      setError('Image file is too large. Please upload an image under 10MB');
+      setError('Image file is too large. Maximum size is 10MB.');
       return;
     }
     
@@ -101,13 +96,12 @@ function MuzzleMapper() {
       const imageDataUrl = e.target.result;
       setCapturedImage(imageDataUrl);
       
-      // Load image into canvas for processing
       const img = new Image();
       img.onload = () => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         
-        // Resize image to optimal size for processing
+        // Optimize image size for processing
         const maxSize = 800;
         let width = img.width;
         let height = img.height;
@@ -128,8 +122,10 @@ function MuzzleMapper() {
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Process the image
         processImage(canvas);
+      };
+      img.onerror = () => {
+        setError('Error loading image. Please try another file.');
       };
       img.src = imageDataUrl;
     };
@@ -150,7 +146,7 @@ function MuzzleMapper() {
         const ctx = canvas.getContext('2d');
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Validate muzzle image
+        // Validate muzzle image with AI
         const validationResult = validateMuzzleImage(imageData);
         setValidation(validationResult);
 
@@ -169,7 +165,7 @@ function MuzzleMapper() {
           setProcessedImage(processedCanvas.toDataURL('image/png'));
         }
 
-        // Extract feature vector
+        // Extract 28-dimensional feature vector
         const features = extractFeatureVector(processed, canvas.width, canvas.height);
         setFeatureVector(features);
 
@@ -191,11 +187,6 @@ function MuzzleMapper() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    
-    // Restart camera if not in upload mode
-    if (!useUpload && !cameraUnavailable) {
-      startCamera();
-    }
   }
 
   function useForEnrollment() {
@@ -203,7 +194,8 @@ function MuzzleMapper() {
       sessionStorage.setItem('pendingMuzzleData', JSON.stringify({
         image: processedImage,
         featureVector,
-        validation
+        validation,
+        captureMode
       }));
       window.location.href = '/enroll';
     }
@@ -231,11 +223,11 @@ function MuzzleMapper() {
         </div>
 
         <div className="mapper-info">
-          <p><strong>MVP 1:</strong> Position the cow's muzzle within the guide box. The system validates it's a muzzle print and applies CLAHE enhancement.</p>
+          <p><strong>MVP 1:</strong> Capture or upload a clear photo of the cow's muzzle. Our AI validates it's a muzzle print and applies CLAHE enhancement for accurate biometric analysis.</p>
         </div>
 
         {error && (
-          <div className={`error-message ${cameraUnavailable || !validation?.isValid ? 'warning' : ''}`}>
+          <div className={`error-message ${!validation?.isValid ? 'warning' : ''}`}>
             {cameraUnavailable ? '📷' : validation?.isValid ? '⚠️' : '🐄'} {error}
           </div>
         )}
@@ -243,8 +235,25 @@ function MuzzleMapper() {
         <div className="mapper-container">
           {!capturedImage ? (
             <>
+              {/* Capture Mode Toggle */}
+              <div className="capture-mode-selector">
+                <button
+                  className={`mode-btn ${captureMode === 'camera' ? 'active' : ''}`}
+                  onClick={() => !cameraUnavailable && setCaptureMode('camera')}
+                  disabled={cameraUnavailable}
+                >
+                  📷 Camera
+                </button>
+                <button
+                  className={`mode-btn ${captureMode === 'upload' ? 'active' : ''}`}
+                  onClick={() => setCaptureMode('upload')}
+                >
+                  📁 Upload Image
+                </button>
+              </div>
+
               {/* Camera View */}
-              {!useUpload && !cameraUnavailable && (
+              {captureMode === 'camera' && !cameraUnavailable && (
                 <div className="camera-view">
                   <video 
                     ref={videoRef} 
@@ -268,7 +277,7 @@ function MuzzleMapper() {
                   <div className="camera-controls">
                     <button 
                       onClick={() => setShowGuide(!showGuide)}
-                      className="btn btn-secondary"
+                      className="btn btn-secondary btn-sm"
                     >
                       {showGuide ? 'Hide Guide' : 'Show Guide'}
                     </button>
@@ -276,22 +285,18 @@ function MuzzleMapper() {
                       onClick={captureImage}
                       className="btn btn-primary btn-capture"
                     >
-                      📸 Capture
+                      📸 Capture Photo
                     </button>
                   </div>
                 </div>
               )}
 
               {/* Upload View */}
-              {(useUpload || cameraUnavailable) && (
+              {captureMode === 'upload' && (
                 <div className="upload-view">
                   <div className="upload-icon">📁</div>
-                  <h3>Upload Muzzle Image</h3>
-                  <p>
-                    {cameraUnavailable 
-                      ? 'Camera is unavailable. Please upload a clear photo of the cow\'s muzzle.'
-                      : 'Or upload a pre-captured image of the cow\'s muzzle.'}
-                  </p>
+                  <h3>Upload Muzzle Photo</h3>
+                  <p>Upload a clear, well-lit photo of the cow's muzzle for biometric analysis.</p>
                   
                   <input
                     ref={fileInputRef}
@@ -302,37 +307,58 @@ function MuzzleMapper() {
                     id="muzzle-upload"
                   />
                   
-                  <label htmlFor="muzzle-upload" className="btn btn-primary btn-upload">
-                    📁 Choose Image File
-                  </label>
+                  <button 
+                    onClick={triggerFileUpload}
+                    className="btn btn-primary btn-upload"
+                  >
+                    📁 Choose File
+                  </button>
                   
                   <div className="upload-requirements">
                     <h4>📋 Image Requirements</h4>
+                    <div className="requirements-grid">
+                      <div className="requirement-item ✅">
+                        <span>Clear, well-lit photo</span>
+                      </div>
+                      <div className="requirement-item ✅">
+                        <span>Muzzle fills most of frame</span>
+                      </div>
+                      <div className="requirement-item ✅">
+                        <span>Visible ridge patterns</span>
+                      </div>
+                      <div className="requirement-item ✅">
+                        <span>JPEG, PNG, or WebP</span>
+                      </div>
+                      <div className="requirement-item ✅">
+                        <span>Max file size: 10MB</span>
+                      </div>
+                      <div className="requirement-item ✅">
+                        <span>Minimal motion blur</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="upload-tips">
+                    <h4>💡 Pro Tips</h4>
                     <ul>
-                      <li>✅ Clear, well-lit photo of cow muzzle</li>
-                      <li>✅ Muzzle should fill most of the frame</li>
-                      <li>✅ Visible ridge patterns</li>
-                      <li>✅ JPEG, PNG, or WebP format</li>
-                      <li>✅ Max file size: 10MB</li>
+                      <li>Capture from 6-12 inches distance</li>
+                      <li>Ensure even lighting (no harsh shadows)</li>
+                      <li>Clean the muzzle if dirty for better ridge visibility</li>
+                      <li>Take multiple photos and select the clearest one</li>
                     </ul>
                   </div>
-                </div>
-              )}
-
-              {/* Toggle between camera and upload */}
-              {!cameraUnavailable && (
-                <div className="capture-mode-toggle">
-                  <button
-                    onClick={() => setUseUpload(!useUpload)}
-                    className="btn btn-secondary btn-toggle"
-                  >
-                    {useUpload ? '📷 Switch to Camera' : '📁 Switch to Upload'}
-                  </button>
                 </div>
               )}
             </>
           ) : (
             <div className="capture-result">
+              <div className="result-header">
+                <h3>✅ Image Captured</h3>
+                <span className="capture-mode-badge">
+                  {captureMode === 'camera' ? '📷 Camera' : '📁 Upload'}
+                </span>
+              </div>
+
               <div className="image-comparison">
                 <div className="image-panel">
                   <h4>Original (Grayscale)</h4>
@@ -344,6 +370,7 @@ function MuzzleMapper() {
                     <div className="processing-overlay">
                       <div className="spinner"></div>
                       <p>Processing image...</p>
+                      <p className="processing-sub">Applying AI enhancement</p>
                     </div>
                   ) : (
                     <>
@@ -356,42 +383,61 @@ function MuzzleMapper() {
 
               {validation && (
                 <div className={`validation-result ${getValidationColor(validation.confidence)}`}>
-                  <h4>
-                    {validation.isValid ? '✅ Muzzle Print Validated' : '⚠️ Validation Warning'}
-                  </h4>
+                  <div className="validation-header">
+                    <h4>
+                      {validation.isValid ? '✅ Muzzle Print Validated' : '⚠️ Validation Warning'}
+                    </h4>
+                    <span className="confidence-score">
+                      {(validation.confidence * 100).toFixed(1)}% Confidence
+                    </span>
+                  </div>
                   <p className="validation-message">{validation.message}</p>
+                  
                   <div className="confidence-meter">
-                    <div className="meter-label">Confidence Score</div>
+                    <div className="meter-label">Overall Confidence</div>
                     <div className="meter-bar">
                       <div 
                         className={`meter-fill ${getValidationColor(validation.confidence)}`}
                         style={{ width: `${validation.confidence * 100}%` }}
                       ></div>
                     </div>
-                    <div className="meter-value">{(validation.confidence * 100).toFixed(1)}%</div>
                   </div>
+
                   <div className="validation-scores">
                     <div className="score-item">
-                      <span className="score-name">Texture</span>
+                      <div className="score-icon">🔬</div>
+                      <span className="score-name">Texture (LBP)</span>
                       <span className="score-value">{(validation.scores.texture * 100).toFixed(0)}%</span>
                     </div>
                     <div className="score-item">
+                      <div className="score-icon">⚖️</div>
                       <span className="score-name">Symmetry</span>
                       <span className="score-value">{(validation.scores.symmetry * 100).toFixed(0)}%</span>
                     </div>
                     <div className="score-item">
+                      <div className="score-icon">📐</div>
                       <span className="score-name">Edge Density</span>
                       <span className="score-value">{(validation.scores.edge * 100).toFixed(0)}%</span>
                     </div>
                     <div className="score-item">
+                      <div className="score-icon">🎯</div>
                       <span className="score-name">Contrast</span>
                       <span className="score-value">{(validation.scores.contrast * 100).toFixed(0)}%</span>
                     </div>
                   </div>
+
                   {!validation.isValid && (
                     <div className="validation-warning">
-                      ⚠️ <strong>Note:</strong> For best results, ensure the image shows a clear cow muzzle with visible ridge patterns. 
-                      This validation helps ensure accurate matching.
+                      <strong>⚠️ Low Confidence Detection</strong>
+                      <p>The image may not be a valid cow muzzle print. For accurate matching, please ensure:</p>
+                      <ul>
+                        <li>The image shows a clear cow muzzle (not other body parts)</li>
+                        <li>Ridge patterns are visible</li>
+                        <li>Lighting is adequate</li>
+                      </ul>
+                      <button onClick={retakePhoto} className="btn btn-warning btn-sm">
+                        🔄 Retake/Upload New Photo
+                      </button>
                     </div>
                   )}
                 </div>
@@ -399,8 +445,8 @@ function MuzzleMapper() {
 
               {featureVector && (
                 <div className="feature-info">
-                  <h4>✅ Feature Vector Extracted</h4>
-                  <p>28-dimensional biometric feature vector successfully extracted</p>
+                  <h4>✅ Biometric Feature Vector Extracted</h4>
+                  <p>28-dimensional feature vector successfully extracted for database matching</p>
                   <div className="feature-visualization">
                     {featureVector.map((val, idx) => (
                       <div key={idx} className="feature-bar">
@@ -417,14 +463,14 @@ function MuzzleMapper() {
 
               <div className="capture-actions">
                 <button onClick={retakePhoto} className="btn btn-secondary">
-                  🔄 Retake / Upload Another
+                  🔄 Retake / New Upload
                 </button>
                 <button 
                   onClick={useForEnrollment} 
                   className="btn btn-primary"
                   disabled={!featureVector}
                 >
-                  ✓ Use for Enrollment
+                  ✓ Proceed to Enrollment
                 </button>
               </div>
             </div>
@@ -445,17 +491,17 @@ function MuzzleMapper() {
           <div className="pipeline-steps">
             <div className="pipeline-step">
               <span className="step-badge">1</span>
-              <span>Capture/Upload Image</span>
+              <span>Capture/Upload</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">2</span>
-              <span>Validate Muzzle (LBP + Symmetry)</span>
+              <span>AI Validation</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">3</span>
-              <span>Grayscale Conversion</span>
+              <span>Grayscale</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
@@ -465,33 +511,63 @@ function MuzzleMapper() {
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">5</span>
-              <span>CLAHE Enhancement</span>
+              <span>CLAHE</span>
             </div>
             <div className="pipeline-arrow">→</div>
             <div className="pipeline-step">
               <span className="step-badge">6</span>
-              <span>Feature Extraction (28-D)</span>
+              <span>Feature Extract (28-D)</span>
             </div>
           </div>
           
           <div className="algorithm-details">
-            <h4>🧠 Validation Algorithm</h4>
+            <h4>🧠 Validation Algorithm Details</h4>
             <div className="algo-grid">
               <div className="algo-item">
                 <strong>Local Binary Patterns (LBP)</strong>
-                <p>Analyzes texture patterns unique to muzzle ridges</p>
+                <p>Analyzes micro-texture patterns unique to bovine muzzle ridges. Compares each pixel with its 8 neighbors to create texture signature.</p>
               </div>
               <div className="algo-item">
                 <strong>Symmetry Analysis</strong>
-                <p>Cow muzzles have bilateral symmetry patterns</p>
+                <p>Bovine muzzles exhibit bilateral symmetry. Calculates left-right mirror correlation to validate anatomical structure.</p>
               </div>
               <div className="algo-item">
-                <strong>Edge Density</strong>
-                <p>Measures ridge density characteristic of muzzle prints</p>
+                <strong>Edge Density Detection</strong>
+                <p>Muzzle prints have characteristic ridge patterns with edge density between 15-40%. Uses Sobel operators for edge detection.</p>
               </div>
               <div className="algo-item">
                 <strong>Contrast Distribution</strong>
-                <p>Validates proper lighting and image quality</p>
+                <p>Validates proper lighting conditions. Optimal muzzle images have standard deviation between 40-80 in grayscale histogram.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="tech-specs">
+            <h4>📊 Technical Specifications</h4>
+            <div className="specs-table">
+              <div className="spec-row">
+                <span className="spec-label">Feature Vector Dimensions</span>
+                <span className="spec-value">28</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-label">Validation Threshold</span>
+                <span className="spec-value">≥45% confidence</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-label">High Confidence Threshold</span>
+                <span className="spec-value">≥60% confidence</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-label">Image Processing Time</span>
+                <span className="spec-value">&lt;500ms</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-label">Supported Formats</span>
+                <span className="spec-value">JPEG, PNG, WebP</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-label">Max File Size</span>
+                <span className="spec-value">10 MB</span>
               </div>
             </div>
           </div>
