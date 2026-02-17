@@ -190,8 +190,11 @@ The app will open at `http://localhost:5173`
 
 ### Algorithms
 - **Cosine Similarity**: Match scoring
-- **16-Dimensional Feature Vectors**: Biometric representation
+- **28-Dimensional Feature Vectors**: Biometric representation (grid mean, edge density, texture variance, radial patterns)
 - **SSIM Concept**: Structural similarity for comparison
+- **LBP Texture Analysis**: Validates muzzle print authenticity
+- **Symmetry Detection**: Checks bilateral symmetry of muzzle
+- **Edge Density Analysis**: Verifies ridge pattern characteristics
 
 ---
 
@@ -200,28 +203,35 @@ The app will open at `http://localhost:5173`
 ### Image Processing Pipeline
 
 ```
-RGB Image → Grayscale → Gaussian Blur → CLAHE → Feature Extraction
+RGB Image → Muzzle Validation → Grayscale → Gaussian Blur → CLAHE → Feature Extraction
 ```
 
-1. **Grayscale Conversion**
+1. **Muzzle Validation** (NEW - Cow-Specific Detection)
+   - **Local Binary Patterns (LBP)**: Analyzes texture patterns unique to muzzle ridges
+   - **Symmetry Analysis**: Cow muzzles have bilateral symmetry (left-right mirror)
+   - **Edge Density**: Muzzle prints have characteristic ridge edge density (15-40%)
+   - **Contrast Distribution**: Validates proper lighting and image quality
+   - **Confidence Score**: Combined weighted score (≥45% = valid muzzle)
+
+2. **Grayscale Conversion**
    ```javascript
    gray = 0.299*R + 0.587*G + 0.114*B
    ```
 
-2. **Gaussian Blur** (Noise Reduction)
+3. **Gaussian Blur** (Noise Reduction)
    - 3x3 kernel convolution
    - Reduces high-frequency noise
 
-3. **CLAHE** (Contrast Enhancement)
+4. **CLAHE** (Contrast Enhancement)
    - 8x8 tile grid
    - Clip limit: 2.0
    - Enhances muzzle ridge visibility
 
-4. **Feature Extraction**
-   - 4x4 grid division
-   - Mean intensity per cell (16 features)
-   - Edge density per cell (16 features)
-   - Total: 32-dimensional vector (simplified to 16 for demo)
+5. **Feature Extraction** (28 dimensions)
+   - Grid mean intensity (4x4 = 16 features)
+   - Edge density per quadrant (2x2 = 4 features)
+   - Texture variance per quadrant (2x2 = 4 features)
+   - Radial patterns from center (4 features)
 
 ### Matching Algorithm
 
@@ -231,9 +241,12 @@ similarity = (A · B) / (||A|| × ||B||)
 
 - Cosine similarity between feature vectors
 - Returns 0-100% match score
-- 85%+ = Excellent match
-- 70-84% = Good match
-- 50-69% = Possible match
+- Confidence boost applied when validation ≥60%
+- **Match thresholds**:
+  - 85%+ = Excellent match
+  - 70-84% = Good match
+  - 50-69% = Possible match
+  - <50% = No match
 
 ---
 
@@ -286,8 +299,10 @@ ufugaji-bioid/
 - "Muzzle prints are unalterable - unlike ear tags that thieves cut off"
 
 ### Technical Depth
-- "We trained concepts from Convolutional Neural Networks to extract feature points from bovine muzzles"
+- "We implemented a CNN-inspired feature extraction pipeline with 28-dimensional feature vectors"
 - "Our CLAHE implementation enhances ridge visibility for accurate matching"
+- "**Cow-specific validation**: Uses Local Binary Patterns (LBP), symmetry analysis, and edge density detection to verify the image is actually a muzzle print"
+- "Multi-stage validation ensures only valid muzzle prints are enrolled and matched"
 
 ### Impact
 - "8 million+ cattle in ASAL regions worth billions of shillings"
