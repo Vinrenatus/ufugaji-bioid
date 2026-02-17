@@ -1,68 +1,195 @@
 /**
  * Advanced Image Processing for Bovine Muzzle Print Analysis
- * Implements cow-specific detection and feature extraction
+ * Implements cow-specific detection, duplicate detection, and feature extraction
  */
 
 /**
- * Validate if an image appears to be a valid muzzle print
- * Returns confidence score 0-1
+ * Calculate image perceptual hash (pHash) for duplicate detection
+ * Returns a 64-bit hash as a string
+ */
+export function calculatePerceptualHash(imageData) {
+  const { width, height } = imageData;
+  
+  // Resize to 32x32 for hash calculation
+  const size = 32;
+  const resized = new Float32Array(size * size);
+  
+  const scaleX = width / size;
+  const scaleY = height / size;
+  
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const srcX = Math.floor(x * scaleX);
+      const srcY = Math.floor(y * scaleY);
+      const idx = (srcY * width + srcX) * 4;
+      const gray = 0.299 * imageData.data[idx] + 0.587 * imageData.data[idx + 1] + 0.114 * imageData.data[idx + 2];
+      resized[y * size + x] = gray;
+    }
+  }
+  
+  // Calculate DCT (simplified - use average of rows/cols)
+  const rowAvg = new Float32Array(size);
+  for (let y = 0; y < size; y++) {
+    let sum = 0;
+    for (let x = 0; x < size; x++) {
+      sum += resized[y * size + x];
+    }
+    rowAvg[y] = sum / size;
+  }
+  
+  const colAvg = new Float32Array(size);
+  for (let x = 0; x < size; x++) {
+    let sum = 0;
+    for (let y = 0; y < size; y++) {
+      sum += resized[y * size + x];
+    }
+    colAvg[x] = sum / size;
+  }
+  
+  const overallAvg = (rowAvg.reduce((a, b) => a + b, 0)) / size;
+  
+  // Generate hash based on comparison with average
+  let hash = '';
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const idx = y * size + x;
+      hash += resized[idx] > overallAvg ? '1' : '0';
+    }
+  }
+  
+  // Convert binary string to hex
+  let hexHash = '';
+  for (let i = 0; i < hash.length; i += 4) {
+    const binary = hash.substr(i, 4);
+    hexHash += parseInt(binary, 2).toString(16);
+  }
+  
+  return hexHash;
+}
+
+/**
+ * Calculate Hamming distance between two perceptual hashes
+ * Returns 0-64 (0 = identical, 64 = completely different)
+ */
+export function hammingDistance(hash1, hash2) {
+  if (hash1.length !== hash2.length) return 64;
+  
+  let distance = 0;
+  for (let i = 0; i < hash1.length; i++) {
+    if (hash1[i] !== hash2[i]) distance++;
+  }
+  
+  return distance;
+}
+
+/**
+ * Check if two images are duplicates based on perceptual hash
+ * Returns true if hamming distance <= 5 (very similar)
+ */
+export function areImagesDuplicate(hash1, hash2, threshold = 5) {
+  const distance = hammingDistance(hash1, hash2);
+  return {
+    isDuplicate: distance <= threshold,
+    distance,
+    similarity: 100 - (distance / 64 * 100)
+  };
+}
+
+/**
+ * Advanced cow muzzle validation with multiple checks
+ * Returns detailed validation results
  */
 export function validateMuzzleImage(imageData) {
   const { width, height } = imageData;
-
+  
+  // Aspect ratio check - cow muzzles are roughly square or slightly wider
+  const aspectRatio = width / height;
+  const aspectRatioScore = (aspectRatio >= 0.7 && aspectRatio <= 1.5) ? 1 : Math.max(0, 1 - Math.abs(aspectRatio - 1.1) * 0.5);
+  
   // Check 1: Texture analysis - muzzle prints have distinctive ridge patterns
-  const textureScore = analyzeTexture(imageData, width, height);
+  const textureScore = analyzeMuzzleTexture(imageData, width, height);
   
-  // Check 2: Symmetry - muzzle prints are roughly symmetrical
-  const symmetryScore = analyzeSymmetry(imageData, width, height);
+  // Check 2: Symmetry - cow muzzles are roughly bilaterally symmetrical
+  const symmetryScore = analyzeBilateralSymmetry(imageData, width, height);
   
-  // Check 3: Edge density - muzzle prints have high edge density in ridges
-  const edgeScore = analyzeEdgeDensity(imageData, width, height);
+  // Check 3: Edge density - muzzle prints have specific ridge edge density (15-40%)
+  const edgeScore = analyzeMuzzleEdgeDensity(imageData, width, height);
   
-  // Check 4: Contrast distribution - muzzle prints have specific contrast patterns
+  // Check 4: Contrast distribution - proper muzzle images have specific contrast
   const contrastScore = analyzeContrastDistribution(imageData, width, height);
   
-  // Weighted average
+  // Check 5: Nose print pattern detection (radial symmetry from center)
+  const radialScore = analyzeRadialPattern(imageData, width, height);
+  
+  // Check 6: Color analysis - should be grayscale/natural colors (not artificial)
+  const colorScore = analyzeNaturalColors(imageData, width, height);
+  
+  // Weighted average with emphasis on texture and pattern
   const overallScore = (
-    textureScore * 0.35 +
-    symmetryScore * 0.25 +
-    edgeScore * 0.25 +
-    contrastScore * 0.15
+    textureScore * 0.25 +
+    symmetryScore * 0.15 +
+    edgeScore * 0.20 +
+    contrastScore * 0.15 +
+    radialScore * 0.15 +
+    aspectRatioScore * 0.05 +
+    colorScore * 0.05
   );
   
+  // Additional checks for non-muzzle detection
+  const isProbablyFace = detectHumanFaceCharacteristics(imageData, width, height);
+  const isProbablyObject = detectNonBiologicalObject(imageData, width, height);
+  
+  // Penalize if detected as face or artificial object
+  let finalScore = overallScore;
+  if (isProbablyFace) finalScore *= 0.3; // Heavy penalty for face-like patterns
+  if (isProbablyObject) finalScore *= 0.4; // Heavy penalty for artificial objects
+  
+  const isValid = finalScore >= 0.45 && !isProbablyFace && !isProbablyObject;
+  
   return {
-    isValid: overallScore >= 0.45, // Threshold for valid muzzle
-    confidence: overallScore,
+    isValid,
+    confidence: finalScore,
     scores: {
       texture: textureScore,
       symmetry: symmetryScore,
       edge: edgeScore,
-      contrast: contrastScore
+      contrast: contrastScore,
+      radial: radialScore,
+      aspect: aspectRatioScore,
+      color: colorScore
     },
-    message: getValidationMessage(overallScore)
+    flags: {
+      isProbablyFace,
+      isProbablyObject
+    },
+    message: getValidationMessage(finalScore, isProbablyFace, isProbablyObject)
   };
 }
 
-function analyzeTexture(imageData, width, height) {
+/**
+ * Analyze texture patterns specific to cow muzzles
+ * Uses Local Binary Patterns and ridge detection
+ */
+function analyzeMuzzleTexture(imageData, width, height) {
   const { data } = imageData;
   const grayData = new Float32Array(width * height);
   
-  // Convert to grayscale
   for (let i = 0; i < width * height; i++) {
     const idx = i * 4;
     grayData[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
   }
   
-  // Calculate local binary pattern histogram
+  // LBP analysis with muzzle-specific patterns
   let lbpScore = 0;
   let validPixels = 0;
+  let ridgePatternCount = 0;
   
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 2; x < width - 2; x++) {
       const center = grayData[y * width + x];
-      let lbp = 0;
       
       // 8-neighbor LBP
+      let lbp = 0;
       const neighbors = [
         grayData[(y-1) * width + (x-1)],
         grayData[(y-1) * width + x],
@@ -78,18 +205,30 @@ function analyzeTexture(imageData, width, height) {
         if (neighbors[i] >= center) lbp |= (1 << i);
       }
       
-      // Muzzle prints typically have LBP values in mid-range (texture patterns)
-      if (lbp > 20 && lbp < 235) {
+      // Cow muzzle ridges create specific LBP patterns (mid-range values)
+      if (lbp > 30 && lbp < 220) {
         lbpScore++;
+        
+        // Check for ridge-like patterns (alternating high-low)
+        const pattern = neighbors.map((v, i) => v > center ? 1 : 0).join('');
+        if (pattern.includes('010') || pattern.includes('101')) {
+          ridgePatternCount++;
+        }
       }
       validPixels++;
     }
   }
   
-  return Math.min(1, lbpScore / validPixels);
+  const baseScore = lbpScore / validPixels;
+  const ridgeBonus = Math.min(0.3, ridgePatternCount / validPixels * 2);
+  
+  return Math.min(1, baseScore + ridgeBonus);
 }
 
-function analyzeSymmetry(imageData, width, height) {
+/**
+ * Analyze bilateral symmetry (cow muzzles are symmetrical left-right)
+ */
+function analyzeBilateralSymmetry(imageData, width, height) {
   const { data } = imageData;
   const grayData = new Float32Array(width * height);
   
@@ -98,12 +237,11 @@ function analyzeSymmetry(imageData, width, height) {
     grayData[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
   }
   
-  // Calculate vertical symmetry (muzzle prints are roughly symmetrical)
   let symmetryScore = 0;
   let comparisons = 0;
-  
   const midX = Math.floor(width / 2);
   
+  // Compare left and right halves
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < midX; x++) {
       const leftVal = grayData[y * width + x];
@@ -118,7 +256,10 @@ function analyzeSymmetry(imageData, width, height) {
   return symmetryScore / comparisons;
 }
 
-function analyzeEdgeDensity(imageData, width, height) {
+/**
+ * Analyze edge density specific to muzzle ridge patterns
+ */
+function analyzeMuzzleEdgeDensity(imageData, width, height) {
   const { data } = imageData;
   let edgeCount = 0;
   let totalPixels = 0;
@@ -145,16 +286,17 @@ function analyzeEdgeDensity(imageData, width, height) {
       
       const magnitude = Math.sqrt(gx * gx + gy * gy);
       
-      // Muzzle prints have moderate edge density (ridges)
-      if (magnitude > 30 && magnitude < 150) {
+      // Muzzle ridges create moderate edge density (not too sharp, not too smooth)
+      if (magnitude > 25 && magnitude < 120) {
         edgeCount++;
       }
       totalPixels++;
     }
   }
   
-  // Ideal edge density for muzzle: 15-40%
   const edgeDensity = edgeCount / totalPixels;
+  
+  // Ideal edge density for muzzle: 15-40%
   if (edgeDensity >= 0.15 && edgeDensity <= 0.40) {
     return 1;
   } else if (edgeDensity < 0.15) {
@@ -164,19 +306,20 @@ function analyzeEdgeDensity(imageData, width, height) {
   }
 }
 
+/**
+ * Analyze contrast distribution
+ */
 function analyzeContrastDistribution(imageData, width, height) {
   const { data } = imageData;
   const histogram = new Array(256).fill(0);
   
-  // Build histogram
   for (let i = 0; i < data.length; i += 4) {
     const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
     histogram[gray]++;
   }
   
-  // Calculate contrast metrics
   let mean = 0;
-  let totalPixels = width * height;
+  const totalPixels = width * height;
   
   for (let i = 0; i < 256; i++) {
     mean += i * histogram[i];
@@ -199,12 +342,194 @@ function analyzeContrastDistribution(imageData, width, height) {
   }
 }
 
-function getValidationMessage(score) {
-  if (score >= 0.75) return "Excellent muzzle print quality";
-  if (score >= 0.60) return "Good muzzle print detected";
-  if (score >= 0.45) return "Acceptable muzzle print";
-  if (score >= 0.30) return "Low confidence - may not be a muzzle";
-  return "Warning: Image does not appear to be a muzzle print";
+/**
+ * Analyze radial pattern from center (characteristic of muzzle prints)
+ */
+function analyzeRadialPattern(imageData, width, height) {
+  const { data } = imageData;
+  const centerX = Math.floor(width / 2);
+  const centerY = Math.floor(height / 2);
+  const maxRadius = Math.min(centerX, centerY);
+  
+  const grayData = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const idx = i * 4;
+    grayData[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+  }
+  
+  // Analyze concentric rings
+  const ringCount = 8;
+  const ringMeans = [];
+  
+  for (let r = 0; r < ringCount; r++) {
+    const innerRadius = (r / ringCount) * maxRadius;
+    const outerRadius = ((r + 1) / ringCount) * maxRadius;
+    let sum = 0;
+    let count = 0;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist >= innerRadius && dist < outerRadius) {
+          sum += grayData[y * width + x];
+          count++;
+        }
+      }
+    }
+    
+    ringMeans.push(count > 0 ? sum / count : 0);
+  }
+  
+  // Check for characteristic muzzle pattern (variation between rings)
+  let variance = 0;
+  const overallMean = ringMeans.reduce((a, b) => a + b, 0) / ringCount;
+  for (const mean of ringMeans) {
+    variance += Math.pow(mean - overallMean, 2);
+  }
+  variance /= ringCount;
+  
+  // Muzzle prints have moderate variance between rings
+  const normalizedVariance = Math.sqrt(variance) / 255;
+  return Math.min(1, normalizedVariance * 3); // Scale up for better sensitivity
+}
+
+/**
+ * Check for natural colors (not artificial objects)
+ */
+function analyzeNaturalColors(imageData, width, height) {
+  const { data } = imageData;
+  
+  let naturalPixels = 0;
+  let totalPixels = Math.min(10000, width * height); // Sample pixels
+  
+  for (let i = 0; i < totalPixels * 4; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    // Natural muzzle colors: browns, grays, pinks, blacks
+    // Check if colors are within natural range
+    const isNatural = (
+      // Not overly saturated
+      Math.max(r, g, b) - Math.min(r, g, b) < 100 &&
+      // Not neon/artificial colors
+      !(r > 200 && g > 200 && b < 100) && // Not bright yellow
+      !(r > 200 && g < 100 && b > 200) && // Not magenta
+      !(r < 100 && g > 200 && b > 200) && // Not cyan
+      // Within reasonable brightness
+      (r + g + b) / 3 > 30 && (r + g + b) / 3 < 230
+    );
+    
+    if (isNatural) naturalPixels++;
+  }
+  
+  return naturalPixels / totalPixels;
+}
+
+/**
+ * Detect characteristics typical of human faces (to reject)
+ */
+function detectHumanFaceCharacteristics(imageData, width, height) {
+  const { data } = imageData;
+  
+  // Check for eye-like dark spots in upper third
+  const upperThird = Math.floor(height / 3);
+  let darkSpotsUpper = 0;
+  let darkSpotsLower = 0;
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      
+      if (brightness < 50) {
+        if (y < upperThird) {
+          darkSpotsUpper++;
+        } else {
+          darkSpotsLower++;
+        }
+      }
+    }
+  }
+  
+  // Human faces typically have eyes (dark spots) in upper third
+  const hasEyesLikePattern = darkSpotsUpper > (width * upperThird * 0.02);
+  
+  // Check for mouth-like horizontal dark line in lower third
+  let horizontalLineCount = 0;
+  for (let y = Math.floor(height * 2 / 3); y < height; y++) {
+    let rowDarkCount = 0;
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      if (brightness < 60) rowDarkCount++;
+    }
+    if (rowDarkCount > width * 0.3) horizontalLineCount++;
+  }
+  
+  const hasMouthLikePattern = horizontalLineCount > 3;
+  
+  return hasEyesLikePattern && hasMouthLikePattern;
+}
+
+/**
+ * Detect non-biological artificial objects
+ */
+function detectNonBiologicalObject(imageData, width, height) {
+  const { data } = imageData;
+  
+  // Check for very straight lines (artificial)
+  let straightLineCount = 0;
+  
+  // Check horizontal lines
+  for (let y = 0; y < height; y++) {
+    let consecutiveSimilar = 0;
+    for (let x = 1; x < width; x++) {
+      const idx1 = (y * width + x - 1) * 4;
+      const idx2 = (y * width + x) * 4;
+      const diff = Math.abs(data[idx1] - data[idx2]);
+      
+      if (diff < 5) {
+        consecutiveSimilar++;
+      } else {
+        if (consecutiveSimilar > width * 0.8) straightLineCount++;
+        consecutiveSimilar = 0;
+      }
+    }
+  }
+  
+  // Check vertical lines
+  for (let x = 0; x < width; x++) {
+    let consecutiveSimilar = 0;
+    for (let y = 1; y < height; y++) {
+      const idx1 = ((y - 1) * width + x) * 4;
+      const idx2 = (y * width + x) * 4;
+      const diff = Math.abs(data[idx1] - data[idx2]);
+      
+      if (diff < 5) {
+        consecutiveSimilar++;
+      } else {
+        if (consecutiveSimilar > height * 0.8) straightLineCount++;
+        consecutiveSimilar = 0;
+      }
+    }
+  }
+  
+  // Too many straight lines = artificial object
+  return straightLineCount > 10;
+}
+
+function getValidationMessage(score, isFace, isObject) {
+  if (isFace) return '⚠️ Detected human face characteristics - please upload cow muzzle only';
+  if (isObject) return '⚠️ Detected artificial object - please upload natural cow muzzle';
+  if (score >= 0.75) return '✅ Excellent muzzle print quality';
+  if (score >= 0.60) return '✅ Good muzzle print detected';
+  if (score >= 0.45) return '⚠️ Acceptable muzzle print';
+  if (score >= 0.30) return '⚠️ Low confidence - may not be a muzzle';
+  return '❌ Not a valid cow muzzle print';
 }
 
 /**
@@ -330,7 +655,6 @@ export function applyGaussianBlur(imageData) {
 export function extractFeatureVector(imageData, width, height) {
   const { data } = imageData;
   
-  // Convert to grayscale array
   const grayData = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
     const idx = i * 4;
@@ -447,7 +771,6 @@ export function extractFeatureVector(imageData, width, height) {
     features.push(count > 0 ? sum / count / 255 : 0);
   }
   
-  // Normalize all features to 0-1 range
   const normalizedFeatures = features.map(f => Math.max(0, Math.min(1, f)));
   
   return normalizedFeatures;
@@ -486,24 +809,19 @@ export function processMuzzleImage(canvas) {
   const ctx = canvas.getContext('2d');
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   
-  // Step 1: Validate this is a muzzle print
   const validation = validateMuzzleImage(imageData);
   
-  // Step 2: Convert to grayscale
   let processed = toGrayscale(imageData);
-  
-  // Step 3: Apply Gaussian blur for noise reduction
-  processed = applyGaussianBlur({ data: processed, width: canvas.width, height: canvas.height }, 1);
-  
-  // Step 4: Apply CLAHE for contrast enhancement
+  processed = applyGaussianBlur({ data: processed, width: canvas.width, height: canvas.height });
   processed = applyCLAHE({ data: processed, width: canvas.width, height: canvas.height }, 2.0, 8);
   
-  // Step 5: Extract feature vector
   const featureVector = extractFeatureVector({ data: processed, width: canvas.width, height: canvas.height });
+  const perceptualHash = calculatePerceptualHash(imageData);
   
   return {
     processedData: processed,
     featureVector,
-    validation
+    validation,
+    perceptualHash
   };
 }

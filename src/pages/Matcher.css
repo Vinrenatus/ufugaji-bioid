@@ -318,9 +318,33 @@
   transition: all 0.3s ease;
 }
 
-.match-item.top-match {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
-  border-color: var(--accent);
+.match-item.exact-duplicate {
+  border: 2px solid var(--success);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+}
+
+.exact-match-badge {
+  position: absolute;
+  top: -10px;
+  left: 1rem;
+  background: linear-gradient(135deg, var(--success) 0%, #10b981 100%);
+  color: white;
+  padding: 0.35rem 1rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+
+.duplicate-note {
+  margin-top: 0.5rem !important;
+  padding: 0.5rem;
+  background: rgba(16, 185, 129, 0.1);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--success);
+  font-weight: 600;
 }
 
 .match-item.excellent {

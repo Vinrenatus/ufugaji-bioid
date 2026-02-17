@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { addCattle, getAllCattle } from '../utils/database';
+import { hammingDistance } from '../utils/imageProcessing';
 import './Enroll.css';
 
 const BREEDS = [
@@ -87,14 +88,33 @@ function Enroll() {
     // Generate feature vector (simulated if no muzzle data)
     let featureVector;
     let muzzleImage;
+    let perceptualHash;
     
     if (pendingMuzzleData) {
       featureVector = pendingMuzzleData.featureVector;
       muzzleImage = pendingMuzzleData.image;
+      perceptualHash = pendingMuzzleData.perceptualHash;
+      
+      // Check for duplicate using perceptual hash
+      const allCattle = getAllCattle();
+      const duplicate = allCattle.find(c => {
+        if (!c.perceptualHash || !perceptualHash) return false;
+        const distance = hammingDistance(c.perceptualHash, perceptualHash);
+        return distance <= 5; // Very similar images
+      });
+      
+      if (duplicate) {
+        setSubmitResult({
+          success: false,
+          message: `⚠️ Duplicate detected! This muzzle matches "${duplicate.cowName}" (Owner: ${duplicate.ownerName}). Same cow already enrolled.`
+        });
+        setIsSubmitting(false);
+        return;
+      }
     } else if (useSample) {
-      // Generate sample feature vector for demo
-      featureVector = Array.from({ length: 16 }, () => Math.random());
+      featureVector = Array.from({ length: 28 }, () => Math.random());
       muzzleImage = null;
+      perceptualHash = null;
     } else {
       setSubmitResult({
         success: false,
@@ -104,11 +124,12 @@ function Enroll() {
       return;
     }
 
-    // Save to database
+    // Save to database with image and hash
     const newCattle = addCattle({
       ...formData,
       muzzleImage,
-      featureVector
+      featureVector,
+      perceptualHash
     });
 
     // Clear pending data

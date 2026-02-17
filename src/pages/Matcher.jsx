@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getAllCattle } from '../utils/database';
-import { validateMuzzleImage, toGrayscale, applyGaussianBlur, applyCLAHE, extractFeatureVector, calculateSimilarity } from '../utils/imageProcessing';
+import { validateMuzzleImage, toGrayscale, applyGaussianBlur, applyCLAHE, extractFeatureVector, calculateSimilarity, calculatePerceptualHash, hammingDistance } from '../utils/imageProcessing';
 import './Matcher.css';
 
 function Matcher() {
@@ -154,6 +154,7 @@ function Matcher() {
         processed = applyCLAHE(processed, canvas.width, canvas.height, 2.0, 8);
 
         const queryFeatures = extractFeatureVector(processed, canvas.width, canvas.height);
+        const queryHash = calculatePerceptualHash(imageData);
 
         const cattle = getAllCattle();
 
@@ -169,15 +170,29 @@ function Matcher() {
 
         const results = cattle.map(cattle => {
           const similarity = calculateSimilarity(queryFeatures, cattle.featureVector);
-
-          const adjustedSimilarity = validationResult.confidence >= 0.60
-            ? Math.min(100, similarity * 1.05)
-            : similarity;
+          
+          // Check for exact duplicate using perceptual hash
+          let isExactDuplicate = false;
+          let duplicateScore = 0;
+          if (cattle.perceptualHash && queryHash) {
+            const hashMatch = hammingDistance(queryHash, cattle.perceptualHash);
+            duplicateScore = 100 - (hashMatch / 64 * 100);
+            isExactDuplicate = hashMatch <= 3; // Very close match
+          }
+          
+          // Boost score significantly for exact duplicates
+          const adjustedSimilarity = isExactDuplicate 
+            ? 99.9 
+            : validationResult.confidence >= 0.60
+              ? Math.min(100, similarity * 1.05)
+              : similarity;
 
           return {
             ...cattle,
             matchPercentage: adjustedSimilarity,
-            rawPercentage: similarity
+            rawPercentage: similarity,
+            isExactDuplicate,
+            duplicateScore
           };
         });
 
@@ -186,7 +201,8 @@ function Matcher() {
         setMatchResults({
           queryFeatures,
           matches: results,
-          validation: validationResult
+          validation: validationResult,
+          queryHash
         });
 
         setIsProcessing(false);
@@ -401,9 +417,12 @@ function Matcher() {
                         return (
                           <div
                             key={match.id}
-                            className={`match-item ${matchClass} ${index === 0 ? 'top-match' : ''}`}
+                            className={`match-item ${matchClass} ${index === 0 ? 'top-match' : ''} ${match.isExactDuplicate ? 'exact-duplicate' : ''}`}
                           >
-                            {index === 0 && match.matchPercentage >= 70 && (
+                            {match.isExactDuplicate && (
+                              <div className="exact-match-badge">✅ Exact Match</div>
+                            )}
+                            {index === 0 && match.matchPercentage >= 70 && !match.isExactDuplicate && (
                               <div className="top-match-badge">🏆 Best Match</div>
                             )}
                             <div className="match-percentage">
@@ -418,6 +437,9 @@ function Matcher() {
                               <p className="match-meta">
                                 {match.breed} • {match.location} • {match.certificateId}
                               </p>
+                              {match.isExactDuplicate && (
+                                <p className="duplicate-note">⚠️ This is the same animal (image match)</p>
+                              )}
                             </div>
                             <Link
                               to={`/certificate/${match.id}`}

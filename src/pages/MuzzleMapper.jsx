@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { validateMuzzleImage, toGrayscale, applyGaussianBlur, applyCLAHE, extractFeatureVector } from '../utils/imageProcessing';
+import { validateMuzzleImage, toGrayscale, applyGaussianBlur, applyCLAHE, extractFeatureVector, calculatePerceptualHash } from '../utils/imageProcessing';
 import './MuzzleMapper.css';
 
 function MuzzleMapper() {
@@ -165,9 +165,13 @@ function MuzzleMapper() {
           setProcessedImage(processedCanvas.toDataURL('image/png'));
         }
 
-        // Extract 28-dimensional feature vector
+        // Extract 28-dimensional feature vector and perceptual hash
         const features = extractFeatureVector(processed, canvas.width, canvas.height);
+        const perceptualHash = calculatePerceptualHash(imageData);
         setFeatureVector(features);
+
+        // Store hash for later use
+        sessionStorage.setItem('pendingPerceptualHash', perceptualHash);
 
         setIsProcessing(false);
       } catch (err) {
@@ -191,11 +195,13 @@ function MuzzleMapper() {
 
   function useForEnrollment() {
     if (featureVector) {
+      const perceptualHash = sessionStorage.getItem('pendingPerceptualHash');
       sessionStorage.setItem('pendingMuzzleData', JSON.stringify({
         image: processedImage,
         featureVector,
         validation,
-        captureMode
+        captureMode,
+        perceptualHash
       }));
       window.location.href = '/enroll';
     }
