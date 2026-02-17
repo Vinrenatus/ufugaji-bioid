@@ -297,42 +297,73 @@ function MuzzleMapper() {
                   <div className="upload-icon">📁</div>
                   <h3>Upload Muzzle Photo</h3>
                   <p>Upload a clear, well-lit photo of the cow's muzzle for biometric analysis.</p>
-                  
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/jpg,image/webp"
-                    onChange={handleFileUpload}
-                    className="file-input"
-                    id="muzzle-upload"
-                  />
-                  
-                  <button 
-                    onClick={triggerFileUpload}
-                    className="btn btn-primary btn-upload"
+
+                  {/* Drag and Drop Zone */}
+                  <div 
+                    className="upload-drop-zone"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('drag-over');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('drag-over');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('drag-over');
+                      const file = e.dataTransfer.files[0];
+                      if (file && file.type.startsWith('image/')) {
+                        handleFileUpload({ target: { files: [file] } });
+                      }
+                    }}
                   >
-                    📁 Choose File
-                  </button>
-                  
+                    <div className="drop-zone-content">
+                      <span className="drop-icon">📤</span>
+                      <p><strong>Drag & drop</strong> your image here</p>
+                      <p>or</p>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,image/webp"
+                        onChange={handleFileUpload}
+                        className="file-input"
+                        id="muzzle-upload"
+                      />
+                      <button
+                        onClick={triggerFileUpload}
+                        className="btn btn-primary btn-upload"
+                      >
+                        📁 Browse Files
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="upload-requirements">
                     <h4>📋 Image Requirements</h4>
                     <div className="requirements-grid">
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>Clear, well-lit photo</span>
                       </div>
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>Muzzle fills most of frame</span>
                       </div>
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>Visible ridge patterns</span>
                       </div>
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>JPEG, PNG, or WebP</span>
                       </div>
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>Max file size: 10MB</span>
                       </div>
-                      <div className="requirement-item ✅">
+                      <div className="requirement-item">
+                        <span className="check-icon">✅</span>
                         <span>Minimal motion blur</span>
                       </div>
                     </div>
