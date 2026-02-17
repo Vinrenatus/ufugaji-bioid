@@ -1,0 +1,246 @@
+.enroll-page {
+  padding: 1rem 0;
+}
+
+.enroll-info {
+  background: var(--bg-primary);
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  border-left: 4px solid var(--primary);
+}
+
+.enroll-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.enroll-grid {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Form Styles */
+.enroll-form-card {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.submit-result {
+  padding: 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.submit-result.success {
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+}
+
+.submit-result.error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.btn-block {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+
+/* Muzzle Data Section */
+.muzzle-data-section {
+  background: var(--bg-primary);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  margin-top: 1.5rem;
+}
+
+.muzzle-data-section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.muzzle-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  border-radius: var(--radius);
+}
+
+.muzzle-status.success {
+  background: #d1fae5;
+}
+
+.status-icon {
+  font-size: 2rem;
+}
+
+.muzzle-status strong {
+  display: block;
+  color: #065f46;
+}
+
+.muzzle-status p {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.85rem;
+  color: #047857;
+}
+
+.muzzle-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.divider {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.sample-data-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.sample-data-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* Recent Enrollments */
+.recent-enrollments {
+  position: sticky;
+  top: 100px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.enrollment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.enrollment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+}
+
+.enrollment-item:hover {
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.enrollment-info h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.enrollment-info p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.enrollment-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.offline-badge {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(0, 102, 0, 0.05) 0%, rgba(0, 102, 0, 0.1) 100%);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.offline-badge .badge {
+  margin-bottom: 0.5rem;
+}
+
+.offline-badge p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .enroll-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .recent-enrollments {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .header-spacer {
+    display: none;
+  }
+  
+  .muzzle-status {
+    flex-direction: column;
+    text-align: center;
+  }
+}
