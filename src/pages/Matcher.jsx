@@ -170,27 +170,44 @@ function Matcher() {
 
         const results = cattle.map(cattle => {
           const similarity = calculateSimilarity(queryFeatures, cattle.featureVector);
-          
+
           // Check for exact duplicate using perceptual hash
           let isExactDuplicate = false;
           let duplicateScore = 0;
           if (cattle.perceptualHash && queryHash) {
             const hashMatch = hammingDistance(queryHash, cattle.perceptualHash);
-            duplicateScore = 100 - (hashMatch / 64 * 100);
-            isExactDuplicate = hashMatch <= 3; // Very close match
+            duplicateScore = 100 - (hashMatch / 4096 * 100);
+            isExactDuplicate = hashMatch <= 150; // Very close match
           }
-          
-          // Boost score significantly for exact duplicates
-          const adjustedSimilarity = isExactDuplicate 
-            ? 99.9 
-            : validationResult.confidence >= 0.60
-              ? Math.min(100, similarity * 1.05)
-              : similarity;
+
+          // Latent: Bio-data matching (if available)
+          let bioDataMatch = 0;
+          if (cattle.bioData && cattle.bioData.vector) {
+            // Bio-data contributes to matching (latent enhancement)
+            // This helps when muzzle images are similar but biodata confirms
+            const bioVector = cattle.bioData.vector;
+            let bioSum = 0;
+            for (let i = 0; i < 5; i++) {
+              bioSum += bioVector[i];
+            }
+            bioDataMatch = (bioSum / 5) * 100;
+          }
+
+          // Combined score: 75% muzzle + 25% bio-data (latent enhancement)
+          const hasBioData = cattle.bioData && cattle.bioData.vector;
+          const adjustedSimilarity = isExactDuplicate
+            ? 99.9
+            : hasBioData
+              ? (similarity * 0.75) + (bioDataMatch * 0.25)
+              : validationResult.confidence >= 0.60
+                ? Math.min(100, similarity * 1.05)
+                : similarity;
 
           return {
             ...cattle,
             matchPercentage: adjustedSimilarity,
             rawPercentage: similarity,
+            bioDataMatch: hasBioData ? Math.round(bioDataMatch) : null,
             isExactDuplicate,
             duplicateScore
           };
@@ -439,6 +456,9 @@ function Matcher() {
                               </p>
                               {match.isExactDuplicate && (
                                 <p className="duplicate-note">⚠️ This is the same animal (image match)</p>
+                              )}
+                              {match.bioDataMatch !== null && !match.isExactDuplicate && (
+                                <p className="biodata-note">📊 Bio-data match: {match.bioDataMatch}%</p>
                               )}
                             </div>
                             <Link

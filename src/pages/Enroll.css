@@ -28,6 +28,25 @@
   animation: fadeIn 0.3s ease-out;
 }
 
+.form-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.section-title {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

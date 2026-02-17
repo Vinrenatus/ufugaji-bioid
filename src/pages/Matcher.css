@@ -347,6 +347,17 @@
   font-weight: 600;
 }
 
+.biodata-note {
+  margin-top: 0.5rem !important;
+  padding: 0.5rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--info);
+  font-weight: 600;
+}
+
 .match-item.excellent {
   border-left-color: var(--success);
   border-left-width: 5px;

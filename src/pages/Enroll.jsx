@@ -4,7 +4,9 @@ import { addCattle, getAllCattle } from '../utils/database';
 import { hammingDistance } from '../utils/imageProcessing';
 import './Enroll.css';
 
+// Breed options
 const BREEDS = [
+  'Select Breed',
   'Boran',
   'Zebu',
   'Ankole',
@@ -15,10 +17,21 @@ const BREEDS = [
   'Simmental',
   'Sahiwal',
   'Gyr',
+  'Ayrshire',
+  'Friesian',
+  'Jersey',
+  'Guernsey',
+  'Holstein',
+  'Dexter',
+  'Highland',
+  'Belgian Blue',
+  'Wagyu',
   'Other'
 ];
 
+// Location options (Kenyan counties + regions)
 const LOCATIONS = [
+  'Select Location',
   'Turkana',
   'West Pokot',
   'Kajiado',
@@ -31,6 +44,99 @@ const LOCATIONS = [
   'Mandera',
   'Baringo',
   'Laikipia',
+  'Nakuru',
+  'Uasin Gishu',
+  'Trans Nzoia',
+  'Elgeyo Marakwet',
+  'Nandi',
+  'Bomet',
+  'Kericho',
+  'Bomet',
+  'Nandi',
+  'Kakamega',
+  'Vihiga',
+  'Bungoma',
+  'Busia',
+  'Siaya',
+  'Kisumu',
+  'Homa Bay',
+  'Migori',
+  'Kisii',
+  'Nyamira',
+  'Nairobi',
+  'Kiambu',
+  'Murang\'a',
+  'Nyeri',
+  'Kirinyaga',
+  'Embu',
+  'Tharaka Nithi',
+  'Meru',
+  'Isiolo',
+  'Machakos',
+  'Makueni',
+  'Kitui',
+  'Kilifi',
+  'Kwale',
+  'Mombasa',
+  'Taita Taveta',
+  'Lamu',
+  'Tana River',
+  'Other'
+];
+
+// Age options
+const AGES = [
+  'Select Age',
+  'Calf (0-6 months)',
+  'Weaner (6-12 months)',
+  'Yearling (1-2 years)',
+  '2 years',
+  '3 years',
+  '4 years',
+  '5 years',
+  '6 years',
+  '7 years',
+  '8 years',
+  '9 years',
+  '10 years',
+  '11 years',
+  '12 years',
+  '13+ years'
+];
+
+// Sex options
+const SEXES = [
+  'Select Sex',
+  'Female (Cow/Heifer)',
+  'Male (Bull/Steer)',
+  'Female (Cow)',
+  'Female (Heifer)',
+  'Male (Bull)',
+  'Male (Steer)',
+  'Calf (Unknown)'
+];
+
+// Color/Markings options (Top 10+ for cattle)
+const COLORS = [
+  'Select Color/Markings',
+  'Solid Black',
+  'Solid Brown',
+  'Solid Red',
+  'Solid White',
+  'Black and White (Piebald)',
+  'Brown and White',
+  'Red and White',
+  'Black with White Face',
+  'Brown with White Face',
+  'Spotted/Speckled',
+  'Brindle',
+  'Roan (Red)',
+  'Roan (Blue)',
+  'Dun',
+  'Gray',
+  'Yellow/Tan',
+  'Belted (Dutch Belt)',
+  'Lineback',
   'Other'
 ];
 
@@ -39,16 +145,15 @@ function Enroll() {
   const [formData, setFormData] = useState({
     cowName: '',
     ownerName: '',
-    breed: 'Boran',
-    age: '',
-    location: 'Kajiado',
-    sex: 'Female',
-    color: '',
+    breed: 'Select Breed',
+    age: 'Select Age',
+    location: 'Select Location',
+    sex: 'Select Sex',
+    color: 'Select Color/Markings',
     notes: ''
   });
-  
+
   const [pendingMuzzleData, setPendingMuzzleData] = useState(() => {
-    // Initialize from sessionStorage on first render
     const stored = sessionStorage.getItem('pendingMuzzleData');
     return stored ? JSON.parse(stored) : null;
   });
@@ -57,10 +162,7 @@ function Enroll() {
   const [enrolledCattle, setEnrolledCattle] = useState(() => getAllCattle());
   const [useSample, setUseSample] = useState(false);
 
-  // Initialize enrolled cattle on mount
-   
   useEffect(() => {
-    // Load enrolled cattle on mount
     setEnrolledCattle(getAllCattle());
   }, []);
 
@@ -74,7 +176,7 @@ function Enroll() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    
+
     if (!formData.cowName || !formData.ownerName) {
       setSubmitResult({
         success: false,
@@ -83,26 +185,55 @@ function Enroll() {
       return;
     }
 
+    // Validate required dropdowns
+    if (formData.breed === 'Select Breed') {
+      setSubmitResult({
+        success: false,
+        message: 'Please select a breed'
+      });
+      return;
+    }
+
+    if (formData.location === 'Select Location') {
+      setSubmitResult({
+        success: false,
+        message: 'Please select a location'
+      });
+      return;
+    }
+
+    if (formData.sex === 'Select Sex') {
+      setSubmitResult({
+        success: false,
+        message: 'Please select sex'
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
-    // Generate feature vector (simulated if no muzzle data)
+    // Generate feature vector and metadata
     let featureVector;
     let muzzleImage;
     let perceptualHash;
-    
+    let bioData;
+
     if (pendingMuzzleData) {
       featureVector = pendingMuzzleData.featureVector;
       muzzleImage = pendingMuzzleData.image;
       perceptualHash = pendingMuzzleData.perceptualHash;
-      
+
+      // Create bio-data feature vector for latent matching
+      bioData = createBioDataVector(formData);
+
       // Check for duplicate using perceptual hash
       const allCattle = getAllCattle();
       const duplicate = allCattle.find(c => {
         if (!c.perceptualHash || !perceptualHash) return false;
         const distance = hammingDistance(c.perceptualHash, perceptualHash);
-        return distance <= 5; // Very similar images
+        return distance <= 150; // Very similar images
       });
-      
+
       if (duplicate) {
         setSubmitResult({
           success: false,
@@ -115,6 +246,7 @@ function Enroll() {
       featureVector = Array.from({ length: 28 }, () => Math.random());
       muzzleImage = null;
       perceptualHash = null;
+      bioData = createBioDataVector(formData);
     } else {
       setSubmitResult({
         success: false,
@@ -124,12 +256,14 @@ function Enroll() {
       return;
     }
 
-    // Save to database with image and hash
+    // Save to database with image, hash, and bio-data
     const newCattle = addCattle({
       ...formData,
       muzzleImage,
       featureVector,
-      perceptualHash
+      perceptualHash,
+      bioData,
+      bioDataId: `BIO-${Date.now()}`
     });
 
     // Clear pending data
@@ -143,16 +277,16 @@ function Enroll() {
 
     setIsSubmitting(false);
     setEnrolledCattle(getAllCattle());
-    
+
     // Reset form
     setFormData({
       cowName: '',
       ownerName: '',
-      breed: 'Boran',
-      age: '',
-      location: 'Kajiado',
-      sex: 'Female',
-      color: '',
+      breed: 'Select Breed',
+      age: 'Select Age',
+      location: 'Select Location',
+      sex: 'Select Sex',
+      color: 'Select Color/Markings',
       notes: ''
     });
     setPendingMuzzleData(null);
@@ -182,12 +316,12 @@ function Enroll() {
             <div className="card-header">
               <h2 className="card-title">Register New Cattle</h2>
             </div>
-            
+
             {submitResult && (
               <div className={`submit-result ${submitResult.success ? 'success' : 'error'}`}>
                 {submitResult.success ? '✅' : '⚠️'} {submitResult.message}
                 {submitResult.cattle && (
-                  <button 
+                  <button
                     onClick={() => handleViewCertificate(submitResult.cattle.id)}
                     className="btn btn-primary btn-sm"
                     style={{ marginTop: '0.75rem' }}
@@ -199,133 +333,155 @@ function Enroll() {
             )}
 
             <form onSubmit={handleSubmit}>
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label" htmlFor="cowName">Cow Name *</label>
-                  <input
-                    type="text"
-                    id="cowName"
-                    name="cowName"
-                    className="input"
-                    value={formData.cowName}
-                    onChange={handleChange}
-                    placeholder="e.g., Kamau's Pride"
-                    required
-                  />
-                </div>
+              <div className="form-section">
+                <h3 className="section-title">📝 Basic Information</h3>
 
-                <div className="input-group">
-                  <label className="input-label" htmlFor="ownerName">Owner Name *</label>
-                  <input
-                    type="text"
-                    id="ownerName"
-                    name="ownerName"
-                    className="input"
-                    value={formData.ownerName}
-                    onChange={handleChange}
-                    placeholder="e.g., John Kamau"
-                    required
-                  />
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="cowName">Cow Name *</label>
+                    <input
+                      type="text"
+                      id="cowName"
+                      name="cowName"
+                      className="input"
+                      value={formData.cowName}
+                      onChange={handleChange}
+                      placeholder="e.g., Kamau's Pride"
+                      required
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="ownerName">Owner Name *</label>
+                    <input
+                      type="text"
+                      id="ownerName"
+                      name="ownerName"
+                      className="input"
+                      value={formData.ownerName}
+                      onChange={handleChange}
+                      placeholder="e.g., John Kamau"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label" htmlFor="breed">Breed</label>
-                  <select
-                    id="breed"
-                    name="breed"
-                    className="select"
-                    value={formData.breed}
-                    onChange={handleChange}
-                  >
-                    {BREEDS.map(breed => (
-                      <option key={breed} value={breed}>{breed}</option>
-                    ))}
-                  </select>
+              <div className="form-section">
+                <h3 className="section-title">🐄 Physical Characteristics</h3>
+
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="breed">Breed *</label>
+                    <select
+                      id="breed"
+                      name="breed"
+                      className="select"
+                      value={formData.breed}
+                      onChange={handleChange}
+                      required
+                    >
+                      {BREEDS.map((breed, idx) => (
+                        <option key={idx} value={breed}>{breed}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="sex">Sex *</label>
+                    <select
+                      id="sex"
+                      name="sex"
+                      className="select"
+                      value={formData.sex}
+                      onChange={handleChange}
+                      required
+                    >
+                      {SEXES.map((sex, idx) => (
+                        <option key={idx} value={sex}>{sex}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="age">Age *</label>
+                    <select
+                      id="age"
+                      name="age"
+                      className="select"
+                      value={formData.age}
+                      onChange={handleChange}
+                      required
+                    >
+                      {AGES.map((age, idx) => (
+                        <option key={idx} value={age}>{age}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label" htmlFor="color">Color/Markings *</label>
+                    <select
+                      id="color"
+                      name="color"
+                      className="select"
+                      value={formData.color}
+                      onChange={handleChange}
+                      required
+                    >
+                      {COLORS.map((color, idx) => (
+                        <option key={idx} value={color}>{color}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="input-group">
-                  <label className="input-label" htmlFor="location">Location</label>
+                  <label className="input-label" htmlFor="location">Location *</label>
                   <select
                     id="location"
                     name="location"
                     className="select"
                     value={formData.location}
                     onChange={handleChange}
+                    required
                   >
-                    {LOCATIONS.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
+                    {LOCATIONS.map((loc, idx) => (
+                      <option key={idx} value={loc}>{loc}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div className="form-row">
+              <div className="form-section">
+                <h3 className="section-title">📝 Additional Information</h3>
+
                 <div className="input-group">
-                  <label className="input-label" htmlFor="age">Age</label>
-                  <input
-                    type="text"
-                    id="age"
-                    name="age"
+                  <label className="input-label" htmlFor="notes">Additional Notes</label>
+                  <textarea
+                    id="notes"
+                    name="notes"
                     className="input"
-                    value={formData.age}
+                    rows="3"
+                    value={formData.notes}
                     onChange={handleChange}
-                    placeholder="e.g., 4 years"
-                  />
+                    placeholder="Any distinguishing features, behavior, health status..."
+                  ></textarea>
                 </div>
-
-                <div className="input-group">
-                  <label className="input-label" htmlFor="sex">Sex</label>
-                  <select
-                    id="sex"
-                    name="sex"
-                    className="select"
-                    value={formData.sex}
-                    onChange={handleChange}
-                  >
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label className="input-label" htmlFor="color">Color/Markings</label>
-                <input
-                  type="text"
-                  id="color"
-                  name="color"
-                  className="input"
-                  value={formData.color}
-                  onChange={handleChange}
-                  placeholder="e.g., Brown with white patches"
-                />
-              </div>
-
-              <div className="input-group">
-                <label className="input-label" htmlFor="notes">Additional Notes</label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  className="input"
-                  rows="3"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  placeholder="Any distinguishing features..."
-                ></textarea>
               </div>
 
               {/* Muzzle Data Section */}
               <div className="muzzle-data-section">
                 <h4>Muzzle Print Data</h4>
-                
+
                 {pendingMuzzleData ? (
                   <div className="muzzle-status success">
                     <span className="status-icon">✅</span>
                     <div>
                       <strong>Muzzle print captured</strong>
-                      <p>Feature vector ready from Muzzle Mapper</p>
+                      <p>Feature vector and biometric hash ready from Muzzle Mapper</p>
                     </div>
                     <button
                       type="button"
@@ -343,9 +499,9 @@ function Enroll() {
                     <Link to="/mapper" className="btn btn-primary">
                       📷 Open Muzzle Mapper
                     </Link>
-                    
+
                     <div className="divider">OR</div>
-                    
+
                     <label className="sample-data-option">
                       <input
                         type="checkbox"
@@ -358,8 +514,8 @@ function Enroll() {
                 )}
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="btn btn-success btn-block"
                 disabled={isSubmitting}
               >
@@ -411,6 +567,37 @@ function Enroll() {
       </div>
     </div>
   );
+}
+
+/**
+ * Create bio-data feature vector for latent matching
+ * Encodes categorical data into numeric features
+ */
+function createBioDataVector(formData) {
+  const bioData = {
+    breedId: BREEDS.indexOf(formData.breed),
+    locationId: LOCATIONS.indexOf(formData.location),
+    ageId: AGES.indexOf(formData.age),
+    sexId: SEXES.indexOf(formData.sex),
+    colorId: COLORS.indexOf(formData.color),
+    // Normalized values for matching (0-1 range)
+    breedScore: BREEDS.indexOf(formData.breed) / BREEDS.length,
+    locationScore: LOCATIONS.indexOf(formData.location) / LOCATIONS.length,
+    ageScore: AGES.indexOf(formData.age) / AGES.length,
+    sexScore: SEXES.indexOf(formData.sex) / SEXES.length,
+    colorScore: COLORS.indexOf(formData.color) / COLORS.length
+  };
+
+  // Create combined bio-feature vector (5 features)
+  bioData.vector = [
+    bioData.breedScore,
+    bioData.locationScore,
+    bioData.ageScore,
+    bioData.sexScore,
+    bioData.colorScore
+  ];
+
+  return bioData;
 }
 
 export default Enroll;
